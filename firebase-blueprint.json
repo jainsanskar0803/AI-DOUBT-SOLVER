@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "name": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "format": "uri", "description": "User profile photo URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A chat session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Chat session ID" },
+        "userId": { "type": "string", "description": "ID of the user who owns the chat" },
+        "title": { "type": "string", "description": "Title of the chat session" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the chat was created" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the chat was last updated" },
+        "documentMetadata": {
+          "type": "object",
+          "description": "Metadata for uploaded documents in this chat",
+          "properties": {
+            "fileName": { "type": "string" },
+            "fileSize": { "type": "number" },
+            "fileType": { "type": "string" },
+            "analyzedAt": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "required": ["userId", "title", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a chat session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "chatId": { "type": "string", "description": "ID of the parent chat session" },
+        "role": { "type": "string", "enum": ["user", "assistant"], "description": "Who sent the message" },
+        "content": { "type": "string", "description": "Content of the message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent" }
+      },
+      "required": ["chatId", "role", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat session documents"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a chat session"
+    }
+  }
+}

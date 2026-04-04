@@ -1,0 +1,232 @@
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { renderAsync } from 'docx-preview';
+import { Loader2, FileText, Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+
+export const DocxRenderer = ({ file }) => {
+  const containerRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [scale, setScale] = useState(0.3);
+
+  const fileKey = useMemo(() => file ? `${file.name}-${file.size}-${file.lastModified}` : '', [file]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDocx = async () => {
+      if (!file || !containerRef.current) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        containerRef.current.innerHTML = '';
+        const arrayBuffer = await file.arrayBuffer();
+        if (!isMounted) return;
+
+        await renderAsync(arrayBuffer, containerRef.current, null, {
+          className: 'docx-viewer',
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          debug: false,
+          experimental: true,
+          useWindowScroll: false,
+          trimXmlDeclaration: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+          renderEndnotes: true,
+          renderChanges: true,
+          renderComments: true,
+        });
+        
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error('DOCX rendering error:', err);
+          setError('Failed to render document layout. The file might be too complex or corrupted.');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadDocx();
+    return () => { isMounted = false; };
+  }, [fileKey]);
+
+  const handleOpenInNewTab = async () => {
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer)
+        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Preview: ${file.name}</title>
+          <script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
+          <script src="https://unpkg.com/docx-preview/dist/docx-preview.js"></script>
+          <style>
+            body { background: #f4f4f5; margin: 0; padding: 40px 0; display: flex; justify-content: center; }
+            .docx-wrapper { background: transparent !important; padding: 0 !important; }
+            section.docx { 
+              box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1) !important; 
+              margin-bottom: 40px !important;
+              background: white !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="container"></div>
+          <script>
+            const base64 = "${base64}";
+            const binaryString = window.atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            docx.renderAsync(bytes.buffer, document.getElementById('container'), null, {
+              className: 'docx-viewer',
+              inWrapper: true,
+              ignoreWidth: false,
+              ignoreHeight: false,
+              ignoreFonts: false,
+              breakPages: true,
+              experimental: true,
+              renderHeaders: true,
+              renderFooters: true,
+              renderFootnotes: true,
+              renderEndnotes: true,
+            });
+          </script>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-900 relative group transition-colors duration-300">
+      {/* Content Area */}
+      <div className="flex-1 overflow-auto p-4 sm:p-8 md:p-12 flex justify-center custom-scrollbar relative bg-zinc-100 dark:bg-zinc-900 transition-colors duration-300">
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[var(--card-bg)]/80 backdrop-blur-sm z-20 transition-colors duration-300">
+            <Loader2 size={32} className="text-[var(--ink)] animate-spin mb-4 transition-colors duration-300" />
+            <p className="text-sm font-bold text-[var(--ink)] transition-colors duration-300">Rendering Original Layout...</p>
+          </div>
+        )}
+
+        {error ? (
+          <div className="flex flex-col items-center justify-center p-20 text-center">
+            <p className="text-sm font-bold text-red-600 mb-2">{error}</p>
+            <button 
+              onClick={() => window.open(URL.createObjectURL(file), '_blank')}
+              className="px-6 py-2 bg-zinc-900 dark:bg-zinc-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 dark:hover:bg-zinc-700 transition-all"
+            >
+              Download Original File
+            </button>
+          </div>
+        ) : (
+          <div 
+            className="docx-viewer-container origin-top shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-none border border-zinc-200 dark:border-zinc-800 transition-colors duration-300"
+            style={{ transform: `scale(${scale})` }}
+          >
+            <div ref={containerRef} className="w-full" />
+          </div>
+        )}
+      </div>
+
+      {/* Floating Controls */}
+      <div className="absolute bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 sm:gap-2 p-1.5 sm:p-2 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-xl border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-2xl transition-all duration-300 opacity-95 sm:opacity-90 hover:opacity-100 sm:hover:scale-105 max-w-[95vw] sm:max-w-none overflow-x-auto no-scrollbar">
+        <div className="flex items-center bg-zinc-100/50 dark:bg-zinc-900/50 rounded-xl p-0.5 sm:p-1 border border-zinc-200/50 dark:border-zinc-700/50 transition-colors duration-300">
+          <button 
+            onClick={() => setScale(prev => Math.max(prev - 0.1, 0.3))}
+            className="p-1.5 sm:p-2 hover:bg-white dark:hover:bg-zinc-700 rounded-lg transition-all text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+          >
+            <ZoomOut size={18} className="sm:w-5 sm:h-5" />
+          </button>
+          <span className="px-2 sm:px-4 text-[10px] sm:text-[11px] font-bold text-zinc-900 dark:text-white min-w-[50px] sm:min-w-[70px] text-center tabular-nums transition-colors duration-300">
+            {Math.round(scale * 100)}%
+          </span>
+          <button 
+            onClick={() => setScale(prev => Math.min(prev + 0.1, 2))}
+            className="p-1.5 sm:p-2 hover:bg-white dark:hover:bg-zinc-700 rounded-lg transition-all text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+          >
+            <ZoomIn size={18} className="sm:w-5 sm:h-5" />
+          </button>
+        </div>
+
+        <div className="w-px h-5 sm:h-6 bg-zinc-200 dark:bg-zinc-700 mx-0.5 sm:mx-1 shrink-0 transition-colors duration-300" />
+
+        <button 
+          onClick={handleOpenInNewTab}
+          className="p-2.5 sm:p-3 bg-zinc-900 dark:bg-zinc-700 text-white hover:bg-zinc-800 dark:hover:bg-zinc-600 rounded-xl transition-all shadow-lg shadow-zinc-200 dark:shadow-none active:scale-95 shrink-0"
+          title="Open in New Tab"
+        >
+          <Maximize2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+        </button>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .docx-viewer-container {
+          background: #f4f4f5;
+          padding: 0 !important;
+          min-height: 1000px;
+          transition: transform 0.2s ease-out;
+          display: flex;
+          justify-content: center;
+        }
+        .dark .docx-viewer-container {
+          background: #18181b;
+        }
+        .docx-viewer {
+          padding: 0 !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+          width: 100% !important;
+        }
+        .docx-wrapper {
+          background: transparent !important;
+          padding: 40px 20px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          width: 100% !important;
+        }
+        section.docx {
+          margin-bottom: 40px !important;
+          box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1) !important;
+          background: white !important;
+          /* Let docx-preview handle width and padding from document settings */
+          position: relative !important;
+        }
+        .dark section.docx {
+          background: #ffffff !important; /* Keep document white even in dark mode */
+          box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5) !important;
+        }
+        section.docx:last-child {
+          margin-bottom: 0 !important;
+        }
+        /* Ensure figures and images are contained */
+        section.docx img {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        /* Fix for potential overflow in tables */
+        section.docx table {
+          max-width: 100% !important;
+          overflow-x: auto !important;
+        }
+      `}} />
+    </div>
+  );
+};

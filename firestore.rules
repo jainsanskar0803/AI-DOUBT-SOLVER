@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Unique user ID
+    //   - email: string (required, email format) - User email address
+    //   - name: string (optional) - User display name
+    //   - photoURL: string (optional, uri format) - User profile photo URL
+    //   - createdAt: timestamp (optional) - Account creation timestamp
+    //   - role: string (required, enum: ['user', 'admin']) - User role
+    //
+    // Collection: chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - userId: string (required) - ID of the user who owns the chat
+    //   - title: string (required) - Title of the chat session
+    //   - createdAt: timestamp (required) - When the chat was created
+    //   - updatedAt: timestamp (optional) - When the chat was last updated
+    //   - documentMetadata: list of maps (optional) - Metadata for uploaded documents
+    //
+    // Collection: chats/{chatId}/messages
+    // Document ID: {messageId}
+    // Fields:
+    //   - chatId: string (required) - ID of the parent chat session
+    //   - role: string (required, enum: ['user', 'assistant']) - Who sent the message
+    //   - content: string (required) - Content of the message
+    //   - createdAt: timestamp (required) - When the message was sent
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "jainsanskar0803@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isRecent(time) {
+      return time is timestamp && time > request.time - duration.value(5, 'm') && time < request.time + duration.value(5, 'm');
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'role']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 256 &&
+             data.role in ['user', 'admin'] &&
+             (!('name' in data) || (data.name is string && data.name.size() < 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && isValidUrl(data.photoURL) && data.photoURL.size() < 2048)) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidChat(data) {
+      return hasRequiredFields(['userId', 'title', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 128 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             data.createdAt is timestamp &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
+             (!('documentMetadata' in data) || data.documentMetadata is list || data.documentMetadata == null);
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['chatId', 'role', 'content', 'createdAt']) &&
+             data.chatId is string && data.chatId.size() > 0 && data.chatId.size() < 128 &&
+             data.role in ['user', 'assistant'] &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 50000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == 'user' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+      allow list: if isAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidChat(request.resource.data) && 
+                    (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && isValidChat(request.resource.data) && 
+                    ((resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId) || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && 
+                    (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
+        allow create: if isAuthenticated() && isValidMessage(request.resource.data) && 
+                      (get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid || isAdmin());
+        allow update, delete: if isAdmin();
+      }
+    }
+    
+    // Fallback
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
