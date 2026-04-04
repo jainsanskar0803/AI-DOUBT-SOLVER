@@ -1,86 +1,152 @@
-# AI Book Doubt Solver
+# 🚀 AI Doubt Solver  
+<sub>🧠 Context-Aware AI Learning Assistant</sub>
 
-AI Book Doubt Solver is a powerful, context-aware learning assistant that allows students and researchers to upload PDF books, notes, or documents and get instant, AI-powered answers based on the content. It leverages advanced language models to provide deep insights, summaries, and explanations for complex topics.
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Tech Stack](https://img.shields.io/badge/Stack-React%20%7C%20Firebase%20%7C%20Gemini-blue)
+![Deployment](https://img.shields.io/badge/Deployed-Vercel-black)
+![Status](https://img.shields.io/badge/Status-Active-success)
+![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen)
+![Live](https://img.shields.io/badge/Live-Demo-green)
 
-## 🚀 Key Features
-
-- **PDF Intelligence**: Upload PDF documents and ask questions directly from the content.
-- **Context-Aware Chat**: Get answers that are grounded in your specific study materials.
-- **Multi-Format Support**: Works with PDFs, notes, and various document types.
-- **Real-Time Sync**: Powered by Firebase for real-time data persistence and user authentication.
-- **Secure Authentication**: Google and Email/Password authentication for a personalized experience.
-- **Responsive Design**: Polished, modern UI built with Tailwind CSS and Framer Motion.
-
-## 🛠️ Tech Stack
-
-- **Frontend**: React 19, Vite, Tailwind CSS
-- **Backend/Database**: Firebase (Authentication, Firestore)
-- **AI Engine**: Google Gemini API (`@google/genai`)
-- **Animations**: Framer Motion
-- **Icons**: Lucide React
-- **Notifications**: Sonner (Toast notifications)
-- **PDF Processing**: `pdfjs-dist`, `pdf-parse`
-
-## 📋 Prerequisites
-
-Before you begin, ensure you have the following:
-
-- **Node.js**: Version 18 or higher.
-- **Firebase Project**: A Firebase project with Authentication (Google & Email) and Firestore enabled.
-- **Gemini API Key**: An API key from Google AI for the Gemini model.
-
-## ⚙️ Installation & Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd ai-book-doubt-solver
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**:
-   Create a `.env` file in the root directory and add the following:
-   ```env
-   VITE_GEMINI_API_KEY=your_gemini_api_key
-   VITE_APP_URL=http://localhost:3000
-   ```
-
-4. **Firebase Configuration**:
-   Ensure your `firebase-applet-config.json` (or equivalent configuration in `src/firebase.ts`) contains your Firebase project credentials:
-   ```json
-   {
-     "apiKey": "YOUR_API_KEY",
-     "authDomain": "YOUR_AUTH_DOMAIN",
-     "projectId": "YOUR_PROJECT_ID",
-     "storageBucket": "YOUR_STORAGE_BUCKET",
-     "messagingSenderId": "YOUR_MESSAGING_SENDER_ID",
-     "appId": "YOUR_APP_ID",
-     "firestoreDatabaseId": "(default)"
-   }
-   ```
-
-5. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
-
-6. **Build for production**:
-   ```bash
-   npm run build
-   ```
-
-## 🔐 Security Rules
-
-The application uses Firestore Security Rules to ensure data privacy. Users can only access their own profiles and chat history. Make sure to deploy the `firestore.rules` file to your Firebase project.
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+![GitHub stars](https://img.shields.io/github/stars/jainsanskar0803/AI-DOUBT-SOLVER?style=social)
+![GitHub forks](https://img.shields.io/github/forks/jainsanskar0803/AI-DOUBT-SOLVER?style=social)
+![GitHub issues](https://img.shields.io/github/issues/jainsanskar0803/AI-DOUBT-SOLVER)
+![Last commit](https://img.shields.io/github/last-commit/jainsanskar0803/AI-DOUBT-SOLVER)
 
 ---
 
-Built with ❤️ for learners everywhere.
+## 🌐 Live Deployments
+- 🚀 **Production:** https://ai-doubt-solver-pi.vercel.app  
+- 🧪 **Preview:** https://ai-doubt-solver-6irsxr87g-sanskar-s-projects-a9553b0a.vercel.app  
+
+---
+
+## 📌 Overview
+**AI Doubt Solver** is a real-time AI-powered learning platform that helps students solve doubts instantly with **step-by-step explanations**.  
+
+It combines **LLM intelligence + modern web technologies** to create a **personal tutor experience**, enabling deeper understanding instead of rote learning.
+
+---
+
+## ✨ Key Features
+- 🤖 AI-powered doubt solving using Gemini API  
+- 🧩 Step-by-step explanations  
+- 📄 Context-aware learning from PDFs/notes  
+- ⚡ Real-time chat interface  
+- 🔐 Secure authentication (Firebase)  
+- 🌐 Responsive UI  
+
+---
+
+## 🛠️ Tech Stack
+
+**Frontend**
+- React (Vite)  
+- Tailwind CSS  
+- Framer Motion  
+
+**Backend & Services**
+- Firebase (Authentication + Firestore)  
+
+**AI Integration**
+- Google Gemini API (`@google/genai`)  
+
+**Tools**
+- pdfjs-dist, pdf-parse  
+- Sonner (notifications)  
+- Lucide React  
+
+---
+
+## ⚙️ Installation & Setup
+
+**1. Clone Repository**
+```
+git clone https://github.com/jainsanskar0803/AI-DOUBT-SOLVER.git
+cd AI-DOUBT-SOLVER
+```
+
+**2. Install Dependencies**
+```
+npm install
+```
+
+**3. Environment Variables**
+```
+VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_APP_URL=http://localhost:3000
+```
+
+**4. Run App**
+```
+npm run dev
+```
+
+**5. Build**
+```
+npm run build
+```
+
+---
+
+## 🚀 How It Works
+1. User enters doubt or uploads document  
+2. Input processed via Gemini API  
+3. AI generates contextual explanation  
+4. Response displayed instantly  
+
+---
+
+## 🎯 Use Cases
+- 📖 Homework  
+- 🧮 Problem solving  
+- 🧪 Concept clarity  
+- 📊 Exam preparation  
+
+---
+
+## 🔐 Security
+- Firebase Authentication  
+- Firestore rules for data protection  
+- Private user sessions  
+
+---
+
+## 🔮 Future Enhancements
+- 📷 Image-based solving (OCR)  
+- 🎤 Voice input  
+- 📊 Analytics dashboard  
+- 🧠 Personalized recommendations  
+
+---
+
+## 📈 Project Impact
+- Built real-time AI learning platform  
+- Integrated LLM (Gemini) into production  
+- Implemented authentication + database  
+- Demonstrates full-stack + AI skills  
+
+---
+
+## 🤝 Contributing
+```
+git checkout -b feature-name
+git commit -m "Add feature"
+git push origin feature-name
+```
+
+---
+
+## 📄 License
+This project is licensed under the **MIT License**
+
+---
+
+## 👨‍💻 Author
+**Sanskar Jain**  
+AIML Student | AI & Data Science  
+
+---
+
+## ⭐ Support
+If you like this project, give it a ⭐ on GitHub!
