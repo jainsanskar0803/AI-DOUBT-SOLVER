@@ -1,5 +1,5 @@
 {
-  "name": "AI Book Doubt Solver",
-  "description": "Upload PDF books and ask questions to get instant AI-powered answers based on the content.",
+  "name": "AI Doubt Solver",
+  "description": "Upload PDF or DOCX documents and get instant AI-powered answers based on the content.",
   "requestFramePermissions": []
 }
