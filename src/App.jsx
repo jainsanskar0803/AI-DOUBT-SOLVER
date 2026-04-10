@@ -312,15 +312,18 @@ export default function App() {
                 fileData: { chunks: fileChunks, embeddings, questions },
                 starterQuestions: { fileName: file.name, questions },
               });
-        } catch (err) {
-            console.error(`Error processing ${file.name}:`, err);
-            const reason = err?.message ?? 'Unknown error';
-            toast.error(`Failed to analyse "${file.name}"`, {
-            description: reason,
-        });
-        results.push(null);
-}
+            } catch (err) {
+              // ✅ FIX: catch block now correctly closes the per-file try/catch.
+              // The results array update below is INSIDE the for loop, not after it.
+              console.error(`Error processing ${file.name}:`, err);
+              const reason = err?.message ?? 'Unknown error';
+              toast.error(`Failed to analyse "${file.name}"`, { description: reason });
+              results.push(null);
+            }
+          } // ← for loop ends here
 
+          // ✅ FIX: these lines are now correctly INSIDE the if block but OUTSIDE
+          // the for loop, so they run once after all files are processed.
           const valid = results.filter(Boolean);
           valid.forEach((r) => newMap.set(r.fileName, r.fileData));
           syncFileDataStates(newMap);
