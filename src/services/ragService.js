@@ -27,6 +27,7 @@ function makeAI(apiKey) {
 
 /**
  * Extracts text from a PDF file using parallel page processing.
+ * Throws a descriptive error if the PDF is empty or image-only.
  * The PDF document is destroyed after extraction to free memory.
  *
  * @param {File} file
@@ -35,6 +36,11 @@ function makeAI(apiKey) {
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+  if (pdf.numPages === 0) {
+    pdf.destroy();
+    throw new Error('This PDF has no pages. The file may be corrupted.');
+  }
 
   const pagePromises = [];
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -60,29 +66,83 @@ export async function extractTextFromPDF(file) {
   // Free the PDF worker memory as soon as we're done.
   pdf.destroy();
 
-  return pages.join('\n\n');
+  const joined = pages.join('\n\n');
+
+  if (!joined.trim()) {
+    throw new Error(
+      'No text could be extracted from this PDF. It may be a scanned image-based document. ' +
+      'Try opening it in Google Drive and downloading as .docx, then re-uploading.'
+    );
+  }
+
+  return joined;
 }
 
 /**
  * Extracts raw text from a DOCX file using mammoth.
+ * Validates the ZIP magic bytes and throws a descriptive error for
+ * legacy .doc files, corrupted files, or image-only documents.
  *
  * @param {File} file
  * @returns {Promise<string>}
  */
 export async function extractTextFromDocx(file) {
   const arrayBuffer = await file.arrayBuffer();
+
+  // DOCX files are ZIP archives and must start with the PK magic bytes.
+  const header = new Uint8Array(arrayBuffer.slice(0, 4));
+  if (header[0] !== 0x50 || header[1] !== 0x4B) {
+    if (file.name.toLowerCase().endsWith('.doc')) {
+      throw new Error(
+        'Legacy .doc format is not supported. Please open the file in Word, ' +
+        'save it as .docx ("Word Document"), and re-upload.'
+      );
+    }
+    throw new Error(
+      'This file does not appear to be a valid DOCX. It may be corrupted or ' +
+      'have an incorrect extension. Please verify the file and try again.'
+    );
+  }
+
   const result = await mammoth.extractRawText({ arrayBuffer });
+
+  // Surface mammoth's internal warnings in development.
+  if (result.messages?.length) {
+    console.warn('[mammoth] extraction warnings:', result.messages);
+  }
+
+  if (!result.value?.trim()) {
+    throw new Error(
+      'No text could be extracted from this document. It may contain only images, ' +
+      'charts, or embedded objects. Try opening it in Google Drive and downloading ' +
+      'as .docx, or export it to PDF first.'
+    );
+  }
+
   return result.value;
 }
 
 /**
  * Extracts HTML from a DOCX file for preview rendering.
+ * Validates the ZIP magic bytes and warns on empty output.
  *
  * @param {File} file
  * @returns {Promise<string>}
  */
 export async function extractHtmlFromDocx(file) {
   const arrayBuffer = await file.arrayBuffer();
+
+  // Validate ZIP magic bytes before calling mammoth.
+  const header = new Uint8Array(arrayBuffer.slice(0, 4));
+  if (header[0] !== 0x50 || header[1] !== 0x4B) {
+    if (file.name.toLowerCase().endsWith('.doc')) {
+      throw new Error(
+        'Legacy .doc format is not supported. Please save the file as .docx and re-upload.'
+      );
+    }
+    throw new Error('File appears corrupted or is not a valid DOCX.');
+  }
+
   const result = await mammoth.convertToHtml({ arrayBuffer }, {
     styleMap: [
       "p[style-name='Center'] => p.text-center",
@@ -93,6 +153,15 @@ export async function extractHtmlFromDocx(file) {
       "p[style-name='Heading 3'] => h3:fresh",
     ],
   });
+
+  if (result.messages?.length) {
+    console.warn('[mammoth] HTML conversion warnings:', result.messages);
+  }
+
+  if (!result.value?.trim()) {
+    console.warn('[mammoth] HTML output is empty — document may be image-only.');
+  }
+
   return result.value;
 }
 
@@ -106,7 +175,9 @@ export async function extractText(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'pdf') return extractTextFromPDF(file);
   if (ext === 'docx') return extractTextFromDocx(file);
-  throw new Error('Unsupported file format. Please upload a PDF or DOCX file.');
+  throw new Error(
+    `Unsupported file format ".${ext}". Please upload a PDF or DOCX file.`
+  );
 }
 
 // ─── Chunking ──────────────────────────────────────────────────────────────
@@ -126,7 +197,7 @@ function getOptimalChunkParams(text) {
   const density = punctuation / length;
 
   const words = text.trim().split(/\s+/);
-  const avgWordLen = length / (words.length || 1);
+  const avgWordLen = length / words.length;
 
   const isTechnical = avgWordLen > 6.5 || density > 0.04;
   const isNarrative = avgWordLen < 5.5 && density < 0.02;
