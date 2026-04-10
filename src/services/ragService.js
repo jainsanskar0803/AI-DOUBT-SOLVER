@@ -374,19 +374,33 @@ export async function generateEmbeddings(chunks, apiKey) {
   const batchSize = 100;
   const allEmbeddings = [];
 
+  // Primary model, falls back to stable model if experimental one fails
+  const EMBEDDING_MODELS = [
+    'gemini-embedding-exp-03-07',
+    'text-embedding-004',
+  ];
+
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
+    let success = false;
 
-    const result = await withRetry(() =>
-      ai.models.embedContent({
-        model: 'gemini-embedding-exp-03-07',
-        contents: batch,
-      })
-    );
+    for (const model of EMBEDDING_MODELS) {
+      try {
+        const result = await withRetry(() =>
+          ai.models.embedContent({
+            model,
+            contents: batch,
+          })
+        );
+        allEmbeddings.push(...result.embeddings.map((e) => e.values));
+        success = true;
+        break;
+      } catch (err) {
+        console.warn(`[embeddings] model "${model}" failed:`, err?.message ?? err);
+        if (model === EMBEDDING_MODELS[EMBEDDING_MODELS.length - 1]) throw err;
+      }
+    }
 
-    allEmbeddings.push(...result.embeddings.map((e) => e.values));
-
-    // Throttle between batches — but only when there are more batches coming.
     if (i + batchSize < chunks.length) {
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
@@ -406,14 +420,25 @@ export async function generateQueryEmbedding(query, apiKey) {
   if (!apiKey) throw new Error('API key required for embeddings.');
   const ai = makeAI(apiKey);
 
-  const result = await withRetry(() =>
-    ai.models.embedContent({
-      model: 'gemini-embedding-exp-03-07',
-      contents: [query],
-    })
-  );
+  const EMBEDDING_MODELS = [
+    'gemini-embedding-exp-03-07',
+    'text-embedding-004',
+  ];
 
-  return result.embeddings[0].values;
+  for (const model of EMBEDDING_MODELS) {
+    try {
+      const result = await withRetry(() =>
+        ai.models.embedContent({
+          model,
+          contents: [query],
+        })
+      );
+      return result.embeddings[0].values;
+    } catch (err) {
+      console.warn(`[query embedding] model "${model}" failed:`, err?.message ?? err);
+      if (model === EMBEDDING_MODELS[EMBEDDING_MODELS.length - 1]) throw err;
+    }
+  }
 }
 
 // ─── Retrieval ─────────────────────────────────────────────────────────────
