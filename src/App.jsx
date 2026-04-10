@@ -312,12 +312,14 @@ export default function App() {
                 fileData: { chunks: fileChunks, embeddings, questions },
                 starterQuestions: { fileName: file.name, questions },
               });
-            } catch (err) {
-              console.error(`Error processing ${file.name}:`, err);
-              toast.error(`Failed to analyse "${file.name}". It will be skipped.`);
-              results.push(null);
-            }
-          }
+        } catch (err) {
+            console.error(`Error processing ${file.name}:`, err);
+            const reason = err?.message ?? 'Unknown error';
+            toast.error(`Failed to analyse "${file.name}"`, {
+            description: reason,
+        });
+        results.push(null);
+}
 
           const valid = results.filter(Boolean);
           valid.forEach((r) => newMap.set(r.fileName, r.fileData));
