@@ -1,9 +1,8 @@
 {
-  "apiKey": "AIzaSyCv3hcdJmmcaUI7-Keo_To0wz10YbywlCk",
+  "apiKey": "AIzaSyC-85BEtxdX-C5hhaIyhw0MIp-eg4gO7a8",
   "authDomain": "ai-doubt-solver-4edd4.firebaseapp.com",
   "projectId": "ai-doubt-solver-4edd4",
   "storageBucket": "ai-doubt-solver-4edd4.firebasestorage.app",
   "messagingSenderId": "948934596073",
-  "appId": "1:948934596073:web:e192a6bbe0c712a8f8e778",
-  "firestoreDatabaseId": "(default)"
+  "appId": "1:948934596073:web:e192a6bbe0c712a8f8e778"
 }
