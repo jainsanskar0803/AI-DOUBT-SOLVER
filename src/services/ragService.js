@@ -18,22 +18,21 @@ if (typeof Promise.try !== 'function') {
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-// ─── CHANGE 1: Use only stable, billing-tier-compatible models ─────────────
-// gemini-2.0-flash → gemini-1.5-flash (works on free + billing tier)
-// gemini-embedding-001 → text-embedding-004 (stable, widely available)
 const GENERATIVE_MODEL = 'gemini-1.5-flash';
-const EMBEDDING_MODEL  = 'embedding-001';
+const EMBEDDING_MODEL  = 'text-embedding-004';
 
 // ─── Internal helper ───────────────────────────────────────────────────────
+// Force httpOptions.apiVersion = 'v1' so embedding models are resolved
+// against the stable endpoint instead of v1beta (where they 404).
 function makeAI(apiKey) {
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: { apiVersion: 'v1' },
+  });
 }
 
 // ─── Text extraction ───────────────────────────────────────────────────────
 
-/**
- * Extracts text from a PDF file using parallel page processing.
- */
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
@@ -76,9 +75,6 @@ export async function extractTextFromPDF(file) {
   return joined;
 }
 
-/**
- * Extracts raw text from a DOCX file using mammoth.
- */
 export async function extractTextFromDocx(file) {
   const arrayBuffer = await file.arrayBuffer();
 
@@ -105,26 +101,20 @@ export async function extractTextFromDocx(file) {
   if (!result.value?.trim()) {
     throw new Error(
       'No text could be extracted from this document. It may contain only images, ' +
-      'charts, or embedded objects. Try opening it in Google Drive and downloading ' +
-      'as .docx, or export it to PDF first.'
+      'charts, or embedded objects.'
     );
   }
 
   return result.value;
 }
 
-/**
- * Extracts HTML from a DOCX file for preview rendering.
- */
 export async function extractHtmlFromDocx(file) {
   const arrayBuffer = await file.arrayBuffer();
 
   const header = new Uint8Array(arrayBuffer.slice(0, 4));
   if (header[0] !== 0x50 || header[1] !== 0x4B) {
     if (file.name.toLowerCase().endsWith('.doc')) {
-      throw new Error(
-        'Legacy .doc format is not supported. Please save the file as .docx and re-upload.'
-      );
+      throw new Error('Legacy .doc format is not supported. Please save the file as .docx and re-upload.');
     }
     throw new Error('File appears corrupted or is not a valid DOCX.');
   }
@@ -144,23 +134,14 @@ export async function extractHtmlFromDocx(file) {
     console.warn('[mammoth] HTML conversion warnings:', result.messages);
   }
 
-  if (!result.value?.trim()) {
-    console.warn('[mammoth] HTML output is empty — document may be image-only.');
-  }
-
   return result.value;
 }
 
-/**
- * Dispatch function — routes to the correct extractor based on file extension.
- */
 export async function extractText(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'pdf')  return extractTextFromPDF(file);
   if (ext === 'docx') return extractTextFromDocx(file);
-  throw new Error(
-    `Unsupported file format ".${ext}". Please upload a PDF or DOCX file.`
-  );
+  throw new Error(`Unsupported file format ".${ext}". Please upload a PDF or DOCX file.`);
 }
 
 // ─── Chunking ──────────────────────────────────────────────────────────────
@@ -200,9 +181,9 @@ function detectHeadings(text) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const isShort      = line.length < 80;
-    const isNumbered   = /^(?:(?:Section|Chapter|Part)\s+)?(?:\d+(?:\.\d+)*|[A-Z])[\s.:]/.test(line);
-    const isAllCaps    = line.length > 3 && line === line.toUpperCase() && /[A-Z]/.test(line);
+    const isShort       = line.length < 80;
+    const isNumbered    = /^(?:(?:Section|Chapter|Part)\s+)?(?:\d+(?:\.\d+)*|[A-Z])[\s.:]/.test(line);
+    const isAllCaps     = line.length > 3 && line === line.toUpperCase() && /[A-Z]/.test(line);
     const endsWithColon = line.endsWith(':') && line.length < 50;
 
     if (isShort && (isNumbered || isAllCaps || endsWithColon)) {
@@ -221,10 +202,10 @@ export function chunkText(text) {
   if (headings.length === 0) {
     sections.push({ header: '', content: text });
   } else {
-    const lines          = text.split('\n');
-    let currentHeader    = 'Introduction';
-    let currentContent   = [];
-    let headingIdx       = 0;
+    const lines        = text.split('\n');
+    let currentHeader  = 'Introduction';
+    let currentContent = [];
+    let headingIdx     = 0;
 
     for (let i = 0; i < lines.length; i++) {
       if (headingIdx < headings.length && headings[headingIdx].lineIndex === i) {
@@ -310,47 +291,23 @@ export function chunkText(text) {
 
 // ─── Embeddings ────────────────────────────────────────────────────────────
 
-/**
- * CHANGE 2: Fixed embedding API call format for @google/genai SDK.
- *
- * The old code passed `contents: batch` (array of strings) directly, which
- * caused "models/gemini-embedding-001 is not found for API version v1beta"
- * because:
- *   (a) the model name was wrong — it should be 'text-embedding-004'
- *   (b) the SDK's embedContent expects `contents` as an array of Content
- *       objects OR a single string, not a bare string array for batch calls.
- *
- * Fix: embed one string at a time (or use the correct batch format below).
- * The safest approach with @google/genai is to call embedContent per item
- * in small batches with a delay, which also avoids quota bursts.
- *
- * @param {string[]} chunks
- * @param {string} apiKey
- * @returns {Promise<number[][]>}
- */
 export async function generateEmbeddings(chunks, apiKey) {
   if (!apiKey) throw new Error('API key required for embeddings.');
   const ai          = makeAI(apiKey);
   const allEmbeddings = [];
-
-  // CHANGE 2a: Process in batches of 20 (not 100) to stay within quota limits.
-  // Each item is embedded individually — the new SDK does not support
-  // multi-string batch embedContent in the same call reliably.
-  const batchSize = 20;
+  const batchSize   = 20;
 
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
 
-    // CHANGE 2b: Embed each string individually then collect results.
     const batchEmbeddings = await Promise.all(
       batch.map((text) =>
         withRetry(() =>
           ai.models.embedContent({
-            model: EMBEDDING_MODEL,   // CHANGE 2c: was 'gemini-embedding-001'
-            contents: text,           // CHANGE 2d: pass single string, not array
+            model:    EMBEDDING_MODEL,
+            contents: text,
           })
         ).then((result) => {
-          // CHANGE 2e: Handle both response shapes the SDK may return
           const embedding = result?.embeddings?.[0]?.values
             ?? result?.embedding?.values
             ?? result?.values;
@@ -362,30 +319,25 @@ export async function generateEmbeddings(chunks, apiKey) {
 
     allEmbeddings.push(...batchEmbeddings);
 
-    // Pause between batches to avoid hitting per-minute quota limits.
     if (i + batchSize < chunks.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500)); // CHANGE 2f: 200→500ms
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
   return allEmbeddings;
 }
 
-/**
- * CHANGE 3: Fixed single-query embedding to match the corrected batch approach.
- */
 export async function generateQueryEmbedding(query, apiKey) {
   if (!apiKey) throw new Error('API key required for embeddings.');
   const ai = makeAI(apiKey);
 
   const result = await withRetry(() =>
     ai.models.embedContent({
-      model:    EMBEDDING_MODEL, // CHANGE 3a: was 'gemini-embedding-001'
-      contents: query,           // CHANGE 3b: single string
+      model:    EMBEDDING_MODEL,
+      contents: query,
     })
   );
 
-  // CHANGE 3c: Handle both response shapes
   const embedding = result?.embeddings?.[0]?.values
     ?? result?.embedding?.values
     ?? result?.values;
@@ -504,11 +456,6 @@ export function highlightKeywords(text, query) {
   );
 }
 
-/**
- * CHANGE 4: rephraseQuery — replaced gemini-2.0-flash with gemini-1.5-flash.
- * gemini-2.0-flash is NOT available on free/standard billing tiers and causes
- * "model not found for API version v1beta" errors.
- */
 export async function rephraseQuery(query, history, apiKey) {
   if (!apiKey || history.length === 0) return query;
   const ai = makeAI(apiKey);
@@ -521,7 +468,7 @@ export async function rephraseQuery(query, history, apiKey) {
   try {
     const response = await withRetry(() =>
       ai.models.generateContent({
-        model: GENERATIVE_MODEL, // CHANGE 4: was 'gemini-2.0-flash'
+        model: GENERATIVE_MODEL,
         contents: [{
           role: 'user',
           parts: [{
@@ -544,13 +491,10 @@ NEW QUERY:
     return response.text.trim().replace(/^"|"$/g, '');
   } catch (error) {
     console.error('rephraseQuery error:', error);
-    return query; // Graceful fallback — do not crash the whole pipeline
+    return query;
   }
 }
 
-/**
- * CHANGE 5: autocorrectQuery — replaced gemini-2.0-flash with gemini-1.5-flash.
- */
 export async function autocorrectQuery(query, apiKey) {
   if (!apiKey || query.length < 3) return query;
   const ai = makeAI(apiKey);
@@ -558,7 +502,7 @@ export async function autocorrectQuery(query, apiKey) {
   try {
     const response = await withRetry(() =>
       ai.models.generateContent({
-        model: GENERATIVE_MODEL, // CHANGE 5: was 'gemini-2.0-flash'
+        model: GENERATIVE_MODEL,
         contents: [{
           role: 'user',
           parts: [{
@@ -576,6 +520,6 @@ QUERY: "${query}"`,
     return response.text.trim().replace(/^"|"$/g, '');
   } catch (error) {
     console.error('autocorrectQuery error:', error);
-    return query; // Graceful fallback
+    return query;
   }
 }
