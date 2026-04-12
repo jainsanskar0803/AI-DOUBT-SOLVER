@@ -43,7 +43,7 @@ import {
 } from './firebaseService';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-const GEMINI_MODEL   = "models/gemini-1.5-flash-latest"
+const GEMINI_MODEL   = 'gemini-1.5-flash'
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
 
 // Singleton AI client — created once, reused everywhere.
