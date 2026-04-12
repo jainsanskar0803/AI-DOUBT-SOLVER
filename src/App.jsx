@@ -42,18 +42,51 @@ import {
   createUserProfile,
 } from './firebaseService';
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-const GEMINI_MODEL   = 'gemini-1.5-flash'
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
 
-// Singleton AI client — created once, reused everywhere.
+const GEMINI_MODEL   = 'gemini-1.5-flash';
+ 
+// VITE_ prefix is REQUIRED — Vite strips any env var that does not start with
+// VITE_ before bundling, so import.meta.env.GEMINI_API_KEY is always undefined.
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
+ 
+// ─── API key guard ────────────────────────────────────────────────────────────
+// Catch missing / placeholder keys at app startup rather than letting them
+// cause confusing "model not found" or "quota: 0" errors deep in a callstack.
+if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
+  console.error(
+    '[AI Doubt Solver] VITE_GEMINI_API_KEY is not set.\n' +
+    'Add it to your .env file (local) or Vercel environment variables (production).\n' +
+    'Get a key at: https://aistudio.google.com/app/apikey'
+  );
+  // In production, throw so the ErrorBoundary catches it and shows a UI message
+  // rather than a blank screen.
+  if (import.meta.env.PROD) {
+    throw new Error(
+      'VITE_GEMINI_API_KEY is missing. Please set it in your Vercel ' +
+      'environment variables and redeploy.'
+    );
+  }
+}
+ 
+// ─── Singleton AI client ──────────────────────────────────────────────────────
+// Created once, reused everywhere. Avoids re-instantiating on every render.
 let _aiClient = null;
 function getAI() {
   if (!_aiClient) {
+    if (!GEMINI_API_KEY) {
+      throw new Error(
+        'Gemini API key is not configured. Set VITE_GEMINI_API_KEY in your ' +
+        'environment variables.'
+      );
+    }
     _aiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
   }
   return _aiClient;
 }
+ 
+
+
+
 
 export default function App() {
   const [user, setUser]                               = useState(null);
