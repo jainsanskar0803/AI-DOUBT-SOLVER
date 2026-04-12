@@ -22,7 +22,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 // gemini-2.0-flash → gemini-1.5-flash (works on free + billing tier)
 // gemini-embedding-001 → text-embedding-004 (stable, widely available)
 const GENERATIVE_MODEL = 'gemini-1.5-flash';
-const EMBEDDING_MODEL  = 'text-embedding-004';
+const EMBEDDING_MODEL  = 'gemini-embedding-exp-03-07';
 
 // ─── Internal helper ───────────────────────────────────────────────────────
 function makeAI(apiKey) {
