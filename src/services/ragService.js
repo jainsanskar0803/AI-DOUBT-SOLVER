@@ -17,7 +17,7 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const GENERATIVE_MODEL = 'gemini-1.5-flash';
-const EMBEDDING_MODEL  = 'text-embedding-004';
+const EMBEDDING_MODEL  = 'embedding-001';
 
 function makeAI(apiKey) {
   return new GoogleGenAI({ apiKey });
@@ -28,7 +28,7 @@ function makeAI(apiKey) {
 // be available depending on the project. Calling the REST API directly with
 // v1 is the most reliable approach.
 async function embedViaRest(text, apiKey) {
-  const url = `https://generativelanguage.googleapis.com/v1/models/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
   const res  = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
