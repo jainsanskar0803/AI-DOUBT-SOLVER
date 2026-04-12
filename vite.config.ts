@@ -5,7 +5,6 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Warn if API key is missing at build time
   if (!env.VITE_GEMINI_API_KEY || env.VITE_GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
     console.warn(
       '\n⚠  WARNING: VITE_GEMINI_API_KEY is not set.\n' +
