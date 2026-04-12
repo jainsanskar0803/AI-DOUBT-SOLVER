@@ -42,24 +42,20 @@ import {
   createUserProfile,
 } from './firebaseService';
 
-
+// ─── Constants ────────────────────────────────────────────────────────────────
 const GEMINI_MODEL   = 'gemini-1.5-flash';
- 
+
 // VITE_ prefix is REQUIRED — Vite strips any env var that does not start with
 // VITE_ before bundling, so import.meta.env.GEMINI_API_KEY is always undefined.
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
- 
+
 // ─── API key guard ────────────────────────────────────────────────────────────
-// Catch missing / placeholder keys at app startup rather than letting them
-// cause confusing "model not found" or "quota: 0" errors deep in a callstack.
 if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
   console.error(
     '[AI Doubt Solver] VITE_GEMINI_API_KEY is not set.\n' +
     'Add it to your .env file (local) or Vercel environment variables (production).\n' +
     'Get a key at: https://aistudio.google.com/app/apikey'
   );
-  // In production, throw so the ErrorBoundary catches it and shows a UI message
-  // rather than a blank screen.
   if (import.meta.env.PROD) {
     throw new Error(
       'VITE_GEMINI_API_KEY is missing. Please set it in your Vercel ' +
@@ -67,9 +63,8 @@ if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
     );
   }
 }
- 
+
 // ─── Singleton AI client ──────────────────────────────────────────────────────
-// Created once, reused everywhere. Avoids re-instantiating on every render.
 let _aiClient = null;
 function getAI() {
   if (!_aiClient) {
@@ -83,10 +78,6 @@ function getAI() {
   }
   return _aiClient;
 }
- 
-
-
-
 
 export default function App() {
   const [user, setUser]                               = useState(null);
@@ -346,17 +337,13 @@ export default function App() {
                 starterQuestions: { fileName: file.name, questions },
               });
             } catch (err) {
-              // ✅ FIX: catch block now correctly closes the per-file try/catch.
-              // The results array update below is INSIDE the for loop, not after it.
               console.error(`Error processing ${file.name}:`, err);
               const reason = err?.message ?? 'Unknown error';
               toast.error(`Failed to analyse "${file.name}"`, { description: reason });
               results.push(null);
             }
-          } // ← for loop ends here
+          }
 
-          // ✅ FIX: these lines are now correctly INSIDE the if block but OUTSIDE
-          // the for loop, so they run once after all files are processed.
           const valid = results.filter(Boolean);
           valid.forEach((r) => newMap.set(r.fileName, r.fileData));
           syncFileDataStates(newMap);
