@@ -5,6 +5,7 @@ import nlp from 'compromise';
 import Fuse from 'fuse.js';
 import { withRetry } from './apiUtils';
 
+// ─── Polyfill ──────────────────────────────────────────────────────────────
 if (typeof Promise.try !== 'function') {
   Promise.try = function (fn, ...args) {
     return new Promise((resolve, reject) => {
@@ -13,47 +14,39 @@ if (typeof Promise.try !== 'function') {
   };
 }
 
+// ─── PDF.js worker ─────────────────────────────────────────────────────────
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const GENERATIVE_MODEL = 'gemini-1.5-flash';
-const EMBEDDING_MODEL  = 'embedding-001';
 
-function makeAI(apiKey) {
-  return new GoogleGenAI({ apiKey });
+// ─── Local embeddings using @xenova/transformers ───────────────────────────
+// Runs entirely in the browser — no API key needed for embeddings.
+let _embedder = null;
+
+async function getEmbedder() {
+  if (_embedder) return _embedder;
+  const { pipeline } = await import('@xenova/transformers');
+  _embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+  return _embedder;
 }
 
-// ─── REST-based embedding (bypasses SDK version issues entirely) ────────────
-// The @google/genai SDK defaults to v1beta where text-embedding-004 may not
-// be available depending on the project. Calling the REST API directly with
-// v1 is the most reliable approach.
-async function embedViaRest(text, apiKey) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
-  const res  = await fetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      model:   `models/${EMBEDDING_MODEL}`,
-      content: { parts: [{ text }] },
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(JSON.stringify(err));
-  }
-  const data   = await res.json();
-  const values = data?.embedding?.values;
-  if (!values) throw new Error('No embedding values in REST response.');
-  return values;
+async function embedText(text) {
+  const embedder = await getEmbedder();
+  const output   = await embedder(text, { pooling: 'mean', normalize: true });
+  return Array.from(output.data);
+}
+
+// ─── AI client (for generative tasks only) ────────────────────────────────
+function makeAI(apiKey) {
+  return new GoogleGenAI({ apiKey });
 }
 
 // ─── Text extraction ───────────────────────────────────────────────────────
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-
   if (pdf.numPages === 0) { pdf.destroy(); throw new Error('This PDF has no pages.'); }
-
   const pagePromises = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     pagePromises.push(
@@ -179,8 +172,8 @@ export function chunkText(text) {
         if (currentBuffer) finalChunks.push(currentBuffer);
         let overlapText = '';
         if (overlap > 0 && finalChunks.length > 0) {
-          const lastChunk = finalChunks[finalChunks.length - 1];
-          overlapText = lastChunk.slice(-overlap);
+          const lastChunk  = finalChunks[finalChunks.length - 1];
+          overlapText      = lastChunk.slice(-overlap);
           const lastSepIdx = overlapText.lastIndexOf(separator);
           if (lastSepIdx !== -1) overlapText = overlapText.slice(lastSepIdx + separator.length);
         }
@@ -205,27 +198,20 @@ export function chunkText(text) {
   return processedChunks.filter((c) => c.trim().length > 60).slice(0, 3000);
 }
 
-// ─── Embeddings (via direct REST — most reliable across all API key types) ──
-export async function generateEmbeddings(chunks, apiKey) {
-  if (!apiKey) throw new Error('API key required for embeddings.');
+// ─── Embeddings (local, no API key needed) ────────────────────────────────
+export async function generateEmbeddings(chunks, _apiKey) {
   const allEmbeddings = [];
   const batchSize     = 10;
-
   for (let i = 0; i < chunks.length; i += batchSize) {
-    const batch = chunks.slice(i, i + batchSize);
-    const batchEmbeddings = await Promise.all(
-      batch.map((text) => withRetry(() => embedViaRest(text, apiKey)))
-    );
+    const batch           = chunks.slice(i, i + batchSize);
+    const batchEmbeddings = await Promise.all(batch.map((text) => embedText(text)));
     allEmbeddings.push(...batchEmbeddings);
-    if (i + batchSize < chunks.length) await new Promise((r) => setTimeout(r, 500));
   }
-
   return allEmbeddings;
 }
 
-export async function generateQueryEmbedding(query, apiKey) {
-  if (!apiKey) throw new Error('API key required for embeddings.');
-  return withRetry(() => embedViaRest(query, apiKey));
+export async function generateQueryEmbedding(query, _apiKey) {
+  return embedText(query);
 }
 
 // ─── Retrieval ─────────────────────────────────────────────────────────────
@@ -248,8 +234,8 @@ function getFuseInstance(chunks) {
 export function retrieveRelevantChunks(query, queryEmbedding, chunkEmbeddings, chunks, topK = 5) {
   if (!chunks?.length) return [];
   const vectorScores = chunks.map((chunk, index) => ({ chunk, index, vectorScore: queryEmbedding ? cosineSimilarity(queryEmbedding, chunkEmbeddings[index]) : 0 }));
-  const fuse = getFuseInstance(chunks);
-  const fuzzyScores = new Map(fuse.search(query).map((r) => [r.item.index, 1 - r.score]));
+  const fuse         = getFuseInstance(chunks);
+  const fuzzyScores  = new Map(fuse.search(query).map((r) => [r.item.index, 1 - r.score]));
   return vectorScores
     .map((item) => ({ ...item, combinedScore: item.vectorScore * 0.8 + (fuzzyScores.get(item.index) ?? 0) * 0.2 }))
     .sort((a, b) => b.combinedScore - a.combinedScore)
@@ -285,14 +271,14 @@ export function highlightKeywords(text, query) {
 
 export async function rephraseQuery(query, history, apiKey) {
   if (!apiKey || history.length === 0) return query;
-  const ai = makeAI(apiKey);
+  const ai          = makeAI(apiKey);
   const chatHistory = history.slice(-4).map((m) => `${m.sender === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n');
   try {
     const response = await withRetry(() =>
       ai.models.generateContent({
-        model: GENERATIVE_MODEL,
+        model:    GENERATIVE_MODEL,
         contents: [{ role: 'user', parts: [{ text: `Rephrase the new query as a standalone question using the conversation history.\nReturn ONLY the rephrased query.\n\nHISTORY:\n${chatHistory}\n\nNEW QUERY:\n"${query}"` }] }],
-        config: { temperature: 0.1 },
+        config:   { temperature: 0.1 },
       })
     );
     return response.text.trim().replace(/^"|"$/g, '');
@@ -305,9 +291,9 @@ export async function autocorrectQuery(query, apiKey) {
   try {
     const response = await withRetry(() =>
       ai.models.generateContent({
-        model: GENERATIVE_MODEL,
+        model:    GENERATIVE_MODEL,
         contents: [{ role: 'user', parts: [{ text: `Autocorrect and refine this query. Return ONLY the corrected query.\n\nQUERY: "${query}"` }] }],
-        config: { temperature: 0.1 },
+        config:   { temperature: 0.1 },
       })
     );
     return response.text.trim().replace(/^"|"$/g, '');
