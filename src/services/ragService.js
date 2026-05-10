@@ -18,7 +18,7 @@ if (typeof Promise.try !== 'function') {
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const GENERATIVE_MODEL = 'gemini-2.0-flash';
+const GENERATIVE_MODEL = 'gemini-2.5-flash';
 
 // ─── Local embeddings using @xenova/transformers ───────────────────────────
 // Runs entirely in the browser — no API key needed for embeddings.
